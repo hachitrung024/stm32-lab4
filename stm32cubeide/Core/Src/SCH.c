@@ -5,7 +5,8 @@
  *      Author: hachi
  */
 #include "SCH.h"
-
+extern UART_HandleTypeDef huart2;
+uint32_t current_time = 0;
 enum {
 	ERROR_SCH_TOO_MANY_TASKS,
 	ERROR_SCH_WAITING_FOR_SLAVE_TO_ACK,
@@ -17,74 +18,104 @@ enum {
 	ERROR_SCH_CANNOT_DELETE_TASK
 } errorCode;
 
-#define MAX_TASKS 10  // Số lượng task tối đa trong scheduler
+#define MAX_TASKS 10
 
-typedef struct {
-    void (*pFunction)();  // Con trỏ hàm đến công việc
-    uint32_t delay;       // Thời gian chờ để chạy task lần đầu tiên
-    uint32_t period;      // Chu kỳ chạy lại task
-    uint8_t runMe;       // Biến đếm số lần cần chạy task
+typedef struct sTask {
+	void (*pFunction)(); 	//Con tro ham
+	uint32_t delay;			//Delay truoc khi chay
+	uint32_t period;		//Chu ky lap (tick)
+	uint8_t runMe;			//So lan can chay task nay
+	uint32_t taskID;		//ID cua task
+	struct sTask * next;
 } sTask;
 
-sTask SCH_Tasks[MAX_TASKS];
-uint32_t taskCounter = 0;  // Bộ đếm ID task
+static sTask * head = NULL;	//Danh sach task
+static uint32_t count = 0; 	//Dem so tang dan cho task ID
 
-void SCH_Update(void) {
-    for (int i = 0; i < MAX_TASKS; i++) {
-        if (SCH_Tasks[i].pFunction) {
-            if (SCH_Tasks[i].delay == 0) {
-                // Khi delay đã hết, đặt cờ để chạy task
-                SCH_Tasks[i].runMe += 1;
+uint32_t SCH_Add_Task(void (* pFunction)(), uint32_t DELAY, uint32_t PERIOD){
+	sTask * newTask = (sTask*)malloc(sizeof(sTask));
+	if (newTask == NULL) {
+		return count;
+	}
+	newTask->pFunction = pFunction;
+	newTask->delay = DELAY;
+	newTask->period = PERIOD;
+	newTask->runMe = 0;
+	newTask->taskID = count;
+	newTask->next = NULL;
+	count++;
+	//Neu them moi hoac them vao dau
+	if(head == NULL || head->delay > newTask->delay){
+		if(head != NULL) head->delay -= newTask->delay;
+		newTask->next = head;
+		head = newTask;
+	} else {
+		sTask * current = head;
+		newTask->delay -= current->delay;
+		//Tim kiem vi tri phu hop
+		while(current->next != NULL && current->next->delay <= newTask->delay){
+			newTask->delay -= current->next->delay;
+			current = current->next;
+		}
+		//Chen vao vi tri cua task do
+		newTask->next = current->next;
+		current->next = newTask;
+		if(newTask->next != NULL) newTask->next->delay -= DELAY;
 
-                // Đặt lại delay cho task nếu nó có chu kỳ lặp
-                if (SCH_Tasks[i].period) {
-                    SCH_Tasks[i].delay = SCH_Tasks[i].period;
-                }
-            } else {
-                // Giảm delay của task
-                SCH_Tasks[i].delay--;
-            }
-        }
-    }
+	}
+	return newTask->taskID;
 }
+static void clearHead(){
+	if(head->period <= 0){
+		sTask * endTask = head;
+		head = head->next;
+		free(endTask);
+		return;
+	}
+	sTask * endTask = head;
+	head = head -> next;
+	endTask->delay = endTask->period;
 
+	sTask * current = head;
+	sTask * prev = NULL;
+	while (current != NULL && current->delay <= endTask->delay) {
+		endTask->delay -= current->delay;
+		prev = current;
+		current = current->next;
+	}
+
+	if (prev == NULL) {
+		endTask->next = head;
+		head = endTask;
+	} else {
+		endTask->next = prev->next;
+		prev->next = endTask;
+	}
+	if (endTask->next != NULL) {
+		endTask->next->delay -= endTask->delay;
+	}
+}
+void SCH_Update(){
+	if(head == NULL) return;
+	if(head->delay > 0){
+		head->delay -- ;
+	}
+	//Danh dau va xu li ca cac task co delay = 0
+	while (head != NULL && head->delay==0){
+		head->runMe += 1;
+		clearHead();
+	}
+}
 void SCH_Dispatch_Tasks(void) {
-    for (int i = 0; i < MAX_TASKS; i++) {
-        if (SCH_Tasks[i].runMe > 0) {
-            (*SCH_Tasks[i].pFunction)();  // Chạy task
-            SCH_Tasks[i].runMe -= 1;
-
-            // Nếu task không có chu kỳ (chỉ chạy 1 lần), xóa task khỏi hàng đợi
-            if (SCH_Tasks[i].period == 0) {
-                SCH_Delete_Task(i);
-            }
+    sTask *current = head;
+    while (current != NULL) {
+        if (current->runMe > 0) {
+            (*current->pFunction)();
+            current->runMe -= 1;
         }
+        current = current->next;
     }
 }
 
-uint32_t SCH_Add_Task(void (* pFunction)(), uint32_t DELAY, uint32_t PERIOD) {
-    for (int i = 0; i < MAX_TASKS; i++) {
-        if (!SCH_Tasks[i].pFunction) {  // Tìm vị trí trống
-            SCH_Tasks[i].pFunction = pFunction;
-            SCH_Tasks[i].delay = DELAY;
-            SCH_Tasks[i].period = PERIOD;
-            SCH_Tasks[i].runMe = 0;
-
-            return i;  // Trả về ID của task
-        }
-    }
-    return MAX_TASKS;  // Hàng đợi đầy
-}
-
-uint8_t SCH_Delete_Task(uint32_t taskID) {
-    if (taskID < MAX_TASKS && SCH_Tasks[taskID].pFunction) {
-        SCH_Tasks[taskID].pFunction = NULL;
-        SCH_Tasks[taskID].delay = 0;
-        SCH_Tasks[taskID].period = 0;
-        SCH_Tasks[taskID].runMe = 0;
-        return 1;  // Xóa thành công
-    }
-    return 0;  // Không thành công
-}
 
 
