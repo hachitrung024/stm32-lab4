@@ -18,7 +18,7 @@ enum {
 	ERROR_SCH_CANNOT_DELETE_TASK
 } errorCode;
 
-#define MAX_TASKS 10
+#define MAX_TASKS 40
 
 typedef struct sTask {
 	void (*pFunction)(); 	//Con tro ham
@@ -31,9 +31,36 @@ typedef struct sTask {
 
 static sTask * head = NULL;	//Danh sach task
 static uint32_t count = 0; 	//Dem so tang dan cho task ID
+//Cap phat tinh
+static sTask * freeList = NULL;
+static sTask mem[MAX_TASKS];
+static sTask * sTaskAlloc(){
+	if(freeList == NULL) return NULL;
+	sTask * res = freeList;
+	freeList = freeList->next;
+	res->next = NULL;
+	return res;
+}
+static void sTaskFree(sTask * target){
+	if(target == NULL) return;
+	target->pFunction = NULL;
+	target->delay = 0;
+	target->period = 0;
+	target->runMe = 0;
+	target->taskID = 0;
+	target->next = freeList;
+	freeList = target;
+}
+void SCH_Init(){
+	for(int i = 0; i< MAX_TASKS; i++){
+		mem[i].next = freeList;
+		freeList = &mem[i];
+	}
+}
 
 uint32_t SCH_Add_Task(void (* pFunction)(), uint32_t DELAY, uint32_t PERIOD){
-	sTask * newTask = (sTask*)malloc(sizeof(sTask));
+//	sTask * newTask = (sTask*)malloc(sizeof(sTask));
+	sTask * newTask = sTaskAlloc();
 	if (newTask == NULL) {
 		return count;
 	}
@@ -69,7 +96,8 @@ static void clearHead(){
 	if(head->period <= 0){
 		sTask * endTask = head;
 		head = head->next;
-		free(endTask);
+		(*endTask->pFunction)();
+		sTaskFree(endTask);
 		return;
 	}
 	sTask * endTask = head;
@@ -101,12 +129,16 @@ void SCH_Update(){
 		head->delay -- ;
 	}
 	//Danh dau va xu li ca cac task co delay = 0
-	while (head != NULL && head->delay==0){
+	sTask * current = head;
+	while (current != NULL && current->delay==0){
 		head->runMe += 1;
-		clearHead();
+		current = current->next;
 	}
 }
 void SCH_Dispatch_Tasks(void) {
+	while (head != NULL && head->delay==0){
+	    clearHead();
+	}
     sTask *current = head;
     while (current != NULL) {
         if (current->runMe > 0) {
@@ -116,6 +148,24 @@ void SCH_Dispatch_Tasks(void) {
         current = current->next;
     }
 }
-
+uint8_t SCH_Delete_Task(uint32_t taskID){
+	sTask * current = head;
+	sTask * prev = NULL;
+	while (current != NULL && current->taskID != taskID) {
+		prev = current;
+		current = current->next;
+	}
+	if(current == NULL) return -1;
+	if(current->next != NULL){
+		current->next->delay += current->delay;
+	}
+	if (prev == NULL) {
+		head = current->next;
+	} else {
+		prev->next = current->next;
+	}
+	sTaskFree(current);
+	return 0;
+}
 
 

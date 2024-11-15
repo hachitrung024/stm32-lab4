@@ -25,6 +25,7 @@
 #include "SCH.h"
 #include "stdio.h"
 #include "string.h"
+#include "button.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -62,6 +63,7 @@ static void MX_USART2_UART_Init(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 uint8_t temp = 0;
+uint32_t bl1;
 void HAL_UART_RxCpltCallback ( UART_HandleTypeDef * huart ){
 	if(huart -> Instance == USART2 ){
 		HAL_UART_Transmit (& huart2 , &temp , 1, 50);
@@ -71,7 +73,7 @@ void HAL_UART_RxCpltCallback ( UART_HandleTypeDef * huart ){
 
 char str[20];
 void get_time(){
-	sprintf(str,"%ld ",current_time);
+	sprintf(str,"%ld\r\n",current_time);
     HAL_UART_Transmit(&huart2, (uint8_t*)str, strlen(str), HAL_MAX_DELAY);
 }
 void blink(){
@@ -85,6 +87,10 @@ void blink1(){
 void blink2(){
 	get_time();
 	HAL_GPIO_TogglePin(LD0_GPIO_Port, LD0_Pin);
+}
+void deleteblink(){
+	get_time();
+	SCH_Delete_Task(bl1);
 }
 /* USER CODE END 0 */
 
@@ -127,10 +133,18 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  SCH_Add_Task(blink, 100, 50);
-  SCH_Add_Task(blink1, 100, 100);
+  SCH_Init();
+  SCH_Add_Task(blink, 100, 100);
+  bl1 = SCH_Add_Task(blink1, 130, 100);
+
   while (1)
   {
+	  	  if(isButtonPressed(1)){
+	  		SCH_Delete_Task(bl1);
+	  	  }
+	  	  if(isButtonPressed(2)){
+	  		bl1 = SCH_Add_Task(blink, 100, 100);
+	  	  }
 	 	  SCH_Dispatch_Tasks();
     /* USER CODE END WHILE */
 
@@ -263,6 +277,7 @@ static void MX_GPIO_Init(void)
 
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOA_CLK_ENABLE();
+  __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(LD0_GPIO_Port, LD0_Pin, GPIO_PIN_RESET);
@@ -274,11 +289,18 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(LD0_GPIO_Port, &GPIO_InitStruct);
 
+  /*Configure GPIO pins : BT0_Pin BT1_Pin BT2_Pin */
+  GPIO_InitStruct.Pin = BT0_Pin|BT1_Pin|BT2_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
 }
 
 /* USER CODE BEGIN 4 */
 void HAL_TIM_PeriodElapsedCallback ( TIM_HandleTypeDef * htim ){
 	current_time+=10;
+	buttonRun();
 	SCH_Update();
 }
 /* USER CODE END 4 */
