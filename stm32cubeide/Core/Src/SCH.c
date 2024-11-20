@@ -5,35 +5,93 @@
  *      Author: hachi
  */
 #include "SCH.h"
-extern UART_HandleTypeDef huart2;
-uint32_t current_time = 0;
+
 enum {
 	ERROR_SCH_TOO_MANY_TASKS,
-	ERROR_SCH_WAITING_FOR_SLAVE_TO_ACK,
-	ERROR_SCH_WAITING_FOR_START_COMMAND_FROM_MASTER,
-	ERROR_SCH_ONE_OR_MORE_SLAVES_DID_NOT_START,
-	ERROR_SCH_LOST_SLAVE,
-	ERROR_SCH_CAN_BUS_ERROR,
-	ERROR_I2C_WRITE_BYTE_AT24C64,
 	ERROR_SCH_CANNOT_DELETE_TASK
 } errorCode;
 
-#define MAX_TASKS 10
+#define MAX_TASKS 40
 
+//Cau truc cua 1 Task
 typedef struct sTask {
 	void (*pFunction)(); 	//Con tro ham
 	uint32_t delay;			//Delay truoc khi chay
 	uint32_t period;		//Chu ky lap (tick)
 	uint8_t runMe;			//So lan can chay task nay
 	uint32_t taskID;		//ID cua task
-	struct sTask * next;
+	struct sTask * next;	//Con tro next
 } sTask;
 
+//Hien thuc bang Linked List
 static sTask * head = NULL;	//Danh sach task
 static uint32_t count = 0; 	//Dem so tang dan cho task ID
 
+//Hien thuc cap phat tinh
+static sTask data[MAX_TASKS]; //Cap phat tinh cho sch
+static sTask * freeList = NULL;//Danh sach bo nho trong
+
+//Lay tu freeList 1 vung nho de cap phat
+static sTask * sTaskAlloc(){
+	if(freeList == NULL) return NULL;
+	sTask * res = freeList;
+	freeList = freeList->next;
+	res->next = NULL;
+	return res;
+}
+
+//Giai phong 1 Task, dua vao freeList
+static void sTaskFree(sTask * target){
+	if(target==NULL) return;
+	target->pFunction = NULL;
+	target->delay = 0;
+	target->period = 0;
+	target->runMe = 0;
+	target->taskID = 0;
+	target->next = freeList;
+	freeList = target;
+	return;
+}
+//Khoi tao sch
+void SCH_Init(){
+	int i;
+	for(i = 0; i < MAX_TASKS; i++){
+		data[i].next = freeList;
+		freeList = &data[i];
+	}
+}
+//Ham ho tro cho add task vao Linked List
+static void addtolist(sTask * newTask){
+	if(head == NULL || head->delay > newTask->delay){
+		if(head != NULL) head->delay -= newTask->delay;
+		newTask->next = head;
+		head = newTask;
+	} else {
+		sTask * current = head;
+		sTask * prev = NULL;
+		while (current != NULL && current->delay <= newTask->delay) {
+			if(current->delay == newTask->delay) newTask->delay++;
+			newTask->delay -= current->delay;
+			prev = current;
+			current = current->next;
+		}
+
+		if (prev == NULL) {
+			newTask->next = head;
+			head = newTask;
+		} else {
+			newTask->next = prev->next;
+			prev->next = newTask;
+		}
+		if (newTask->next != NULL) {
+			newTask->next->delay -= newTask->delay;
+		}
+	}
+}
+//Them mot task vao sch
 uint32_t SCH_Add_Task(void (* pFunction)(), uint32_t DELAY, uint32_t PERIOD){
-	sTask * newTask = (sTask*)malloc(sizeof(sTask));
+//	sTask * newTask = (sTask*)malloc(sizeof(sTask));
+	sTask * newTask = sTaskAlloc();
 	if (newTask == NULL) {
 		return count;
 	}
@@ -44,69 +102,34 @@ uint32_t SCH_Add_Task(void (* pFunction)(), uint32_t DELAY, uint32_t PERIOD){
 	newTask->taskID = count;
 	newTask->next = NULL;
 	count++;
-	//Neu them moi hoac them vao dau
-	if(head == NULL || head->delay > newTask->delay){
-		if(head != NULL) head->delay -= newTask->delay;
-		newTask->next = head;
-		head = newTask;
-	} else {
-		sTask * current = head;
-		newTask->delay -= current->delay;
-		//Tim kiem vi tri phu hop
-		while(current->next != NULL && current->next->delay <= newTask->delay){
-			newTask->delay -= current->next->delay;
-			current = current->next;
-		}
-		//Chen vao vi tri cua task do
-		newTask->next = current->next;
-		current->next = newTask;
-		if(newTask->next != NULL) newTask->next->delay -= DELAY;
-
-	}
+	addtolist(newTask);
 	return newTask->taskID;
 }
-static void clearHead(){
-	if(head->period <= 0){
-		sTask * endTask = head;
-		head = head->next;
-		free(endTask);
-		return;
-	}
-	sTask * endTask = head;
-	head = head -> next;
-	endTask->delay = endTask->period;
 
-	sTask * current = head;
-	sTask * prev = NULL;
-	while (current != NULL && current->delay <= endTask->delay) {
-		endTask->delay -= current->delay;
-		prev = current;
-		current = current->next;
-	}
-
-	if (prev == NULL) {
-		endTask->next = head;
-		head = endTask;
-	} else {
-		endTask->next = prev->next;
-		prev->next = endTask;
-	}
-	if (endTask->next != NULL) {
-		endTask->next->delay -= endTask->delay;
-	}
-}
 void SCH_Update(){
 	if(head == NULL) return;
 	if(head->delay > 0){
 		head->delay -- ;
 	}
-	//Danh dau va xu li ca cac task co delay = 0
-	while (head != NULL && head->delay==0){
+	if(head->delay == 0){
 		head->runMe += 1;
-		clearHead();
 	}
 }
+
 void SCH_Dispatch_Tasks(void) {
+	while(head->delay <= 0){
+		if(head->period <= 0){
+			sTask * endTask = head;
+			head = head->next;
+			(*endTask->pFunction)();
+			sTaskFree(endTask);
+		}else {
+			sTask * endTask = head;
+			endTask->delay = endTask->period;
+			head = head->next;
+			addtolist(endTask);
+		}
+	}
     sTask *current = head;
     while (current != NULL) {
         if (current->runMe > 0) {
@@ -117,5 +140,24 @@ void SCH_Dispatch_Tasks(void) {
     }
 }
 
-
+uint8_t SCH_Delete_Task(uint32_t taskID){
+	if(head == NULL) return 1;
+	sTask * current = head;
+	sTask * prev = NULL;
+	while (current != NULL && current->taskID != taskID) {
+		prev = current;
+		current = current->next;
+	}
+	if(current == NULL) return -1;
+	if (prev == NULL) {
+		head = current->next;
+	}else{
+		prev->next = current->next;
+	}
+	if(current->next != NULL){
+		current->next->delay += current->delay;
+	}
+	sTaskFree(current);
+	return 0;
+}
 

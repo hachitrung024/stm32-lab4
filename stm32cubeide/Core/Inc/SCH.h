@@ -8,9 +8,6 @@
 #ifndef INC_SCH_H_
 #define INC_SCH_H_
 #include "main.h"
-#include "stdlib.h"
-
-extern uint32_t current_time;
 
 void SCH_Init(void);
 void SCH_Update(void);

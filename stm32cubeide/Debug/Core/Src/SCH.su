@@ -1,4 +1,8 @@
-SCH.c:35:10:SCH_Add_Task	32	static
-SCH.c:68:13:clearHead	24	static
-SCH.c:98:6:SCH_Update	8	static
-SCH.c:109:6:SCH_Dispatch_Tasks	16	static
+SCH.c:35:16:sTaskAlloc	16	static
+SCH.c:44:13:sTaskFree	16	static
+SCH.c:56:6:SCH_Init	16	static
+SCH.c:64:13:addtolist	24	static
+SCH.c:92:10:SCH_Add_Task	32	static
+SCH.c:109:6:SCH_Update	4	static
+SCH.c:119:6:SCH_Dispatch_Tasks	24	static
+SCH.c:143:9:SCH_Delete_Task	24	static

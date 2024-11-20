@@ -68,15 +68,14 @@ void HAL_UART_RxCpltCallback ( UART_HandleTypeDef * huart ){
 		HAL_UART_Receive_IT (& huart2 , &temp , 1);
 	}
 }
-
+uint32_t current_time;
 char str[20];
 void get_time(){
-	sprintf(str,"%ld ",current_time);
+	sprintf(str,"%ld\r\n",current_time);
     HAL_UART_Transmit(&huart2, (uint8_t*)str, strlen(str), HAL_MAX_DELAY);
 }
 void blink(){
 	get_time();
-	HAL_GPIO_TogglePin(LD0_GPIO_Port, LD0_Pin);
 }
 void blink1(){
 	get_time();
@@ -127,8 +126,15 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  SCH_Add_Task(blink, 100, 50);
-  SCH_Add_Task(blink1, 100, 100);
+  SCH_Init();
+  SCH_Add_Task(blink, 100, 100);
+  SCH_Add_Task(blink, 100, 200);
+  SCH_Add_Task(blink, 100, 0);
+  SCH_Add_Task(blink, 100, 0);
+  SCH_Add_Task(blink, 100, 0);
+
+
+
   while (1)
   {
 	 	  SCH_Dispatch_Tasks();
@@ -290,8 +296,6 @@ void HAL_TIM_PeriodElapsedCallback ( TIM_HandleTypeDef * htim ){
 void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
-	uint8_t here[]="here\n";
-	HAL_UART_Transmit(&huart2, here, sizeof(here) - 1, 50);
   /* User can add his own implementation to report the HAL error return state */
   __disable_irq();
   while (1)

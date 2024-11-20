@@ -1,0 +1,9 @@
+main.c:65:6:HAL_UART_RxCpltCallback	8	static
+main.c:73:6:get_time	8	static
+main.c:77:6:blink	8	static
+main.c:85:6:blink2	0	static
+main.c:81:6:blink1	0	static
+main.c:150:6:SystemClock_Config	72	static,ignoring_inline_asm
+main.c:95:5:main	32	static,ignoring_inline_asm
+main.c:284:6:HAL_TIM_PeriodElapsedCallback	0	static
+main.c:294:6:Error_Handler	0	static,ignoring_inline_asm
