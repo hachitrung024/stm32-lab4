@@ -23,6 +23,8 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "SCH.h"
+#include "stdio.h"
+#include "string.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -54,20 +56,34 @@ static void MX_TIM2_Init(void);
 static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
 /* USER CODE BEGIN PFP */
-void blink(){
-	  HAL_GPIO_TogglePin(LD0_GPIO_Port, LD0_Pin);
-}
+
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 uint8_t temp = 0;
-uint8_t hello[] = "Hello World!";
 void HAL_UART_RxCpltCallback ( UART_HandleTypeDef * huart ){
 	if(huart -> Instance == USART2 ){
 		HAL_UART_Transmit (& huart2 , &temp , 1, 50);
 		HAL_UART_Receive_IT (& huart2 , &temp , 1);
 	}
+}
+uint32_t current_time;
+char str[20];
+void get_time(){
+	sprintf(str,"%ld\r\n",current_time);
+    HAL_UART_Transmit(&huart2, (uint8_t*)str, strlen(str), HAL_MAX_DELAY);
+}
+void blink(){
+	get_time();
+}
+void blink1(){
+	get_time();
+	HAL_GPIO_TogglePin(LD0_GPIO_Port, LD0_Pin);
+}
+void blink2(){
+	get_time();
+	HAL_GPIO_TogglePin(LD0_GPIO_Port, LD0_Pin);
 }
 /* USER CODE END 0 */
 
@@ -102,18 +118,26 @@ int main(void)
   MX_GPIO_Init();
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
+  HAL_TIM_Base_Start_IT(&htim2);
   HAL_UART_Receive_IT(&huart2, &temp,1);
-//  uint8_t hello[] = "Hello World!";
+//  uint8_t hello[] = "Hello !\t";
 //  HAL_UART_Transmit(&huart2, hello, sizeof(hello) - 1, 50);
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+  SCH_Init();
   SCH_Add_Task(blink, 100, 100);
+  SCH_Add_Task(blink, 100, 200);
+  SCH_Add_Task(blink, 100, 0);
+  SCH_Add_Task(blink, 100, 0);
+  SCH_Add_Task(blink, 100, 0);
+
+
+
   while (1)
   {
-	  SCH_Dispatch_Tasks();
-
+	 	  SCH_Dispatch_Tasks();
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -260,6 +284,7 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE BEGIN 4 */
 void HAL_TIM_PeriodElapsedCallback ( TIM_HandleTypeDef * htim ){
+	current_time+=10;
 	SCH_Update();
 }
 /* USER CODE END 4 */
